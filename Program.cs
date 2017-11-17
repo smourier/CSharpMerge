@@ -106,17 +106,6 @@ namespace CSharpMerge
             Console.WriteLine();
         }
 
-        static void Test()
-        {
-            string path = @"D:\SimonMourier\GitHub\SQLNado\SqlNado\Utilities\TableString.cs";
-            var encoding = DetectEncoding(path);
-            Console.WriteLine(encoding.WebName);
-            string text = File.ReadAllText(path, encoding);
-            var tree = CSharpSyntaxTree.ParseText(text);
-            Console.WriteLine(tree);
-            File.WriteAllText("test.txt", tree.ToString());
-        }
-
         static Encoding DetectEncoding(string filePath)
         {
             using (var reader = new StreamReader(filePath, Encoding.Default, true))
