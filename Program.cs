@@ -34,6 +34,9 @@ namespace CSharpMerge
 
         static void SafeMain(string[] args)
         {
+            //Test();
+            //return;
+        
             Console.WriteLine("CSharpMerge - Copyright © 2016-" + DateTime.Now.Year + " Simon Mourier. All rights reserved.");
             Console.WriteLine();
             if (CommandLine.HelpRequested || args.Length < 2)
@@ -60,7 +63,7 @@ namespace CSharpMerge
             outputFilePath = Path.GetFullPath(outputFilePath);
 
             var excludedFiles = Conversions.SplitToList<string>(CommandLine.GetNullifiedArgument("exclude"), ';');
-            var encoding = Encoding.Default;
+            var encoding = Encoding.UTF8;
             var enc = CommandLine.GetNullifiedArgument("encoding");
             if (enc != null)
             {
@@ -74,8 +77,9 @@ namespace CSharpMerge
                 }
             }
 
-            Console.WriteLine("Input  : " + inputDirectoryPath);
-            Console.WriteLine("Output : " + outputFilePath);
+            Console.WriteLine("Input    : " + inputDirectoryPath);
+            Console.WriteLine("Output   : " + outputFilePath);
+            Console.WriteLine("Encoding : " + encoding.WebName);
             Console.WriteLine();
             Merge(inputDirectoryPath, outputFilePath, encoding, excludedFiles);
         }
@@ -90,16 +94,27 @@ namespace CSharpMerge
             Console.WriteLine("Options:");
             Console.WriteLine("    /incai               Includes files whose name ends with 'AssemblyInfo.cs'. Default is false.");
             Console.WriteLine("    /toponly             Includes only the current directory in a search operation. Default is false (work recursively).");
-            Console.WriteLine("    /encoding:<enc>      Defines the encoding to use for the output file path. Default is '" + Encoding.Default.WebName + "'.");
+            Console.WriteLine("    /encoding:<enc>      Defines the encoding to use for the output file path. Default is '" + Encoding.UTF8.WebName + "'.");
             Console.WriteLine("    /exclude:<files>     Defines a list of file paths or names separated by ';'. Default is none.");
             Console.WriteLine();
             Console.WriteLine("Examples:");
             Console.WriteLine();
-            Console.WriteLine("    " + Assembly.GetEntryAssembly().GetName().Name.ToUpperInvariant() + " c:\\mypath\\myproject myproject_merged.cs /encoding:utf-8");
+            Console.WriteLine("    " + Assembly.GetEntryAssembly().GetName().Name.ToUpperInvariant() + " c:\\mypath\\myproject myproject_merged.cs /encoding:" + Encoding.Default.WebName);
             Console.WriteLine();
             Console.WriteLine("        Merges recursively all .cs files, except AssemblyInfo.cs, from the myproject path");
-            Console.WriteLine("        into a single myproject_merged.cs file using '" + Encoding.UTF8.WebName + "' encoding.");
+            Console.WriteLine("        into a single myproject_merged.cs file using '" + Encoding.Default.WebName + "' encoding.");
             Console.WriteLine();
+        }
+
+        static void Test()
+        {
+            string path = @"D:\SimonMourier\GitHub\SQLNado\SqlNado\Utilities\TableString.cs";
+            var encoding = DetectEncoding(path);
+            Console.WriteLine(encoding.WebName);
+            string text = File.ReadAllText(path, encoding);
+            var tree = CSharpSyntaxTree.ParseText(text);
+            Console.WriteLine(tree);
+            File.WriteAllText("test.txt", tree.ToString());
         }
 
         static Encoding DetectEncoding(string filePath)
@@ -144,9 +159,9 @@ namespace CSharpMerge
                     continue;
                 }
 
-                Console.WriteLine(file);
                 var enc = DetectEncoding(file);
                 string text = File.ReadAllText(file, enc);
+                Console.WriteLine(file + ", encoding: " + enc.WebName);
 
                 var tree = CSharpSyntaxTree.ParseText(text);
                 var root = (CompilationUnitSyntax)tree.GetRoot();
