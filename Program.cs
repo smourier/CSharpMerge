@@ -115,6 +115,17 @@ namespace CSharpMerge
             }
         }
 
+        static string NormalizeLineEndings(string text) => NormalizeLineEndings(text, Environment.NewLine);
+        static string NormalizeLineEndings(string text, string newLine)
+        {
+            if (string.IsNullOrEmpty(text))
+                return text;
+
+            var sb = new StringBuilder(text);
+            sb.Replace("\r", "").Replace("\n", newLine);
+            return sb.ToString();
+        }
+
         static void Merge(string inputDirectoryPath, string outputFilePath, Encoding encoding, IList<string> excludedFiles)
         {
             bool incai = CommandLine.GetArgument("incai", false);
@@ -171,13 +182,13 @@ namespace CSharpMerge
             {
                 foreach (var us in uss)
                 {
-                    writer.WriteLine(us);
+                    writer.WriteLine(NormalizeLineEndings(us));
                 }
 
                 writer.WriteLine();
                 foreach (var code in codes)
                 {
-                    writer.WriteLine(code);
+                    writer.WriteLine(NormalizeLineEndings(code));
                 }
             }
         }
