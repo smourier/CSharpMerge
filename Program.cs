@@ -34,10 +34,7 @@ namespace CSharpMerge
 
         static void SafeMain(string[] args)
         {
-            //Test();
-            //return;
-        
-            Console.WriteLine("CSharpMerge - Copyright © 2016-" + DateTime.Now.Year + " Simon Mourier. All rights reserved.");
+            Console.WriteLine("CSharpMerge - Copyright (C) 2016-" + DateTime.Now.Year + " Simon Mourier. All rights reserved.");
             Console.WriteLine();
             if (CommandLine.HelpRequested || args.Length < 2)
             {
@@ -63,6 +60,7 @@ namespace CSharpMerge
             outputFilePath = Path.GetFullPath(outputFilePath);
 
             var excludedFiles = Conversions.SplitToList<string>(CommandLine.GetNullifiedArgument("exclude"), ';');
+            var commentsFiles = Conversions.SplitToList<string>(CommandLine.GetNullifiedArgument("comments", @"..\LICENSE"), ';');
             var encoding = Encoding.UTF8;
             var enc = CommandLine.GetNullifiedArgument("encoding");
             if (enc != null)
@@ -80,8 +78,10 @@ namespace CSharpMerge
             Console.WriteLine("Input    : " + inputDirectoryPath);
             Console.WriteLine("Output   : " + outputFilePath);
             Console.WriteLine("Encoding : " + encoding.WebName);
+            Console.WriteLine("Excluded : " + string.Join(", ", excludedFiles));
+            Console.WriteLine("Comments : " + string.Join(", ", commentsFiles));
             Console.WriteLine();
-            Merge(inputDirectoryPath, outputFilePath, encoding, excludedFiles);
+            Merge(inputDirectoryPath, outputFilePath, encoding, excludedFiles, commentsFiles);
         }
 
         static void Help()
@@ -93,16 +93,17 @@ namespace CSharpMerge
             Console.WriteLine();
             Console.WriteLine("Options:");
             Console.WriteLine("    /incai               Includes files whose name ends with 'AssemblyInfo.cs'. Default is false.");
-            Console.WriteLine("    /toponly             Includes only the current directory in a search operation. Default is false (work recursively).");
+            Console.WriteLine("    /toponly             Includes only the current directory in a search operation. Default is false (recursive).");
             Console.WriteLine("    /encoding:<enc>      Defines the encoding to use for the output file path. Default is '" + Encoding.UTF8.WebName + "'.");
             Console.WriteLine("    /exclude:<files>     Defines a list of file paths or names separated by ';'. Default is none.");
+            Console.WriteLine("    /comments:<files>    Defines a list of file paths or names separated by ';' used as comments. Default is ..\\LICENSE.");
             Console.WriteLine();
             Console.WriteLine("Examples:");
             Console.WriteLine();
             Console.WriteLine("    " + Assembly.GetEntryAssembly().GetName().Name.ToUpperInvariant() + " c:\\mypath\\myproject myproject_merged.cs /encoding:" + Encoding.Default.WebName);
             Console.WriteLine();
-            Console.WriteLine("        Merges recursively all .cs files, except AssemblyInfo.cs, from the myproject path");
-            Console.WriteLine("        into a single myproject_merged.cs file using '" + Encoding.Default.WebName + "' encoding.");
+            Console.WriteLine("    Merges recursively all .cs files, except AssemblyInfo.cs, from the myproject path");
+            Console.WriteLine("    into a single myproject_merged.cs file using '" + Encoding.Default.WebName + "' encoding.");
             Console.WriteLine();
         }
 
@@ -126,7 +127,7 @@ namespace CSharpMerge
             return sb.ToString();
         }
 
-        static void Merge(string inputDirectoryPath, string outputFilePath, Encoding encoding, IList<string> excludedFiles)
+        static void Merge(string inputDirectoryPath, string outputFilePath, Encoding encoding, IList<string> excludedFiles, IList<string> commentsFiles)
         {
             bool incai = CommandLine.GetArgument("incai", false);
             bool topdir = CommandLine.GetArgument("toponly", false);
@@ -137,10 +138,22 @@ namespace CSharpMerge
             }
 
             var usings = new HashSet<string>();
+            var comments = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var codes = new List<string>();
-            foreach (var file in Directory.GetFiles(inputDirectoryPath, "*.cs", option))
+            foreach (var file in Directory.GetFiles(inputDirectoryPath, "*.*", option))
             {
                 string name = Path.GetFileName(file);
+
+                if (commentsFiles.Contains(name, StringComparer.OrdinalIgnoreCase) || commentsFiles.Contains(file, StringComparer.OrdinalIgnoreCase))
+                {
+                    Console.WriteLine("Comment " + file);
+                    comments.Add(file);
+                    continue;
+                }
+
+                if (string.Compare(Path.GetExtension(file), ".cs", StringComparison.OrdinalIgnoreCase) != 0)
+                    continue;
+
                 if (name.IndexOf("TemporaryGeneratedFile", StringComparison.OrdinalIgnoreCase) >= 0)
                 {
                     Console.WriteLine("Skip " + file);
@@ -174,12 +187,32 @@ namespace CSharpMerge
                 codes.Add(withoutUsings.ToString());
             }
 
+            // scan for comments in all places
+            foreach (var commentFile in commentsFiles)
+            {
+                string path = Path.GetFullPath(Path.Combine(inputDirectoryPath, commentFile));
+                if (File.Exists(path))
+                {
+                    Console.WriteLine("Comment " + path);
+                    comments.Add(path);
+                }
+            }
+
             var uss = usings.ToList();
             uss.Sort();
 
             // bit of a hack... seems to work for me so far :-)
             using (var writer = new StreamWriter(outputFilePath, false, encoding))
             {
+                foreach (var file in comments)
+                {
+                    var enc = DetectEncoding(file);
+                    string comment = File.ReadAllText(file, enc);
+                    writer.WriteLine("/*");
+                    writer.Write(NormalizeLineEndings(comment));
+                    writer.WriteLine("*/");
+                }
+
                 foreach (var us in uss)
                 {
                     writer.WriteLine(NormalizeLineEndings(us));
