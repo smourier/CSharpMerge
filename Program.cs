@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -65,7 +66,7 @@ namespace CSharpMerge
             var enc = CommandLine.GetNullifiedArgument("encoding");
             if (enc != null)
             {
-                if (int.TryParse(enc, out int cp))
+                if (int.TryParse(enc, NumberStyles.Integer, CultureInfo.CurrentCulture, out int cp))
                 {
                     encoding = Encoding.GetEncoding(cp);
                 }
@@ -93,6 +94,7 @@ namespace CSharpMerge
             Console.WriteLine();
             Console.WriteLine("Options:");
             Console.WriteLine("    /incai               Includes files whose name ends with 'AssemblyInfo.cs'. Default is false.");
+            Console.WriteLine("    /incgs               Includes files whose name ends with 'GlobalSuppressions.cs'. Default is false.");
             Console.WriteLine("    /toponly             Includes only the current directory in a search operation. Default is false (recursive).");
             Console.WriteLine("    /encoding:<enc>      Defines the encoding to use for the output file path. Default is '" + Encoding.UTF8.WebName + "'.");
             Console.WriteLine("    /exclude:<files>     Defines a list of file paths or names separated by ';'. Default is none.");
@@ -130,6 +132,7 @@ namespace CSharpMerge
         static void Merge(string inputDirectoryPath, string outputFilePath, Encoding encoding, IList<string> excludedFiles, IList<string> commentsFiles)
         {
             bool incai = CommandLine.GetArgument("incai", false);
+            bool incgs = CommandLine.GetArgument("incgs", false);
             bool topdir = CommandLine.GetArgument("toponly", false);
             var option = SearchOption.TopDirectoryOnly;
             if (!topdir)
@@ -137,7 +140,7 @@ namespace CSharpMerge
                 option |= SearchOption.AllDirectories;
             }
 
-            var usings = new HashSet<string>();
+            var usings = new HashSet<string>(StringComparer.Ordinal);
             var comments = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var codes = new List<string>();
             foreach (var file in Directory.GetFiles(inputDirectoryPath, "*.*", option))
@@ -161,6 +164,12 @@ namespace CSharpMerge
                 }
 
                 if (!incai && name.EndsWith("AssemblyInfo.cs", StringComparison.OrdinalIgnoreCase))
+                {
+                    Console.WriteLine("Skip " + file);
+                    continue;
+                }
+
+                if (!incgs && name.EndsWith("GlobalSuppressions.cs", StringComparison.OrdinalIgnoreCase))
                 {
                     Console.WriteLine("Skip " + file);
                     continue;

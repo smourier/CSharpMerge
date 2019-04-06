@@ -24,8 +24,10 @@ namespace CSharpMerge.Utilities
                 if (arg == null)
                     continue;
 
-                string upper = arg.ToUpperInvariant();
-                if (arg == "/?" || arg == "-?" || upper == "/HELP" || upper == "-HELP")
+                if (string.Equals(arg, "/?", StringComparison.Ordinal) ||
+                    string.Equals(arg, "-?", StringComparison.Ordinal) ||
+                    string.Equals(arg, "/HELP", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(arg, "-HELP", StringComparison.OrdinalIgnoreCase))
                 {
                     HelpRequested = true;
                 }
@@ -60,7 +62,7 @@ namespace CSharpMerge.Utilities
         }
 
         public static IReadOnlyDictionary<string, string> NamedArguments => _namedArguments;
-        public static IReadOnlyDictionary<int, string> PositionArguments =>_positionArguments;
+        public static IReadOnlyDictionary<int, string> PositionArguments => _positionArguments;
         public static bool HelpRequested { get; }
 
         public static string CommandLineWithoutExe
@@ -90,7 +92,7 @@ namespace CSharpMerge.Utilities
 
             foreach (string arg in arguments)
             {
-                if (arg.StartsWith("-") || arg.StartsWith("/"))
+                if (arg.StartsWith("-", StringComparison.Ordinal) || arg.StartsWith("/", StringComparison.Ordinal))
                 {
                     int pos = arg.IndexOfAny(new[] { '=', ':' }, 1);
                     string argName = pos < 0 ? arg.Substring(1) : arg.Substring(1, pos - 1);

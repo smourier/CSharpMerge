@@ -11,7 +11,7 @@ namespace CSharpMerge.Utilities
 {
     public static class Conversions
     {
-        private static char[] _enumSeparators = new char[] { ',', ';', '+', '|', ' ' };
+        private static readonly char[] _enumSeparators = new char[] { ',', ';', '+', '|', ' ' };
 
         public static Type GetEnumeratedType(Type collectionType)
         {
@@ -131,140 +131,8 @@ namespace CSharpMerge.Utilities
             return 0xFF;
         }
 
-        public static string ToHexa(this byte[] bytes) => bytes != null ? ToHexa(bytes, 0, bytes.Length) : "0x";
-        public static string ToHexa(this byte[] bytes, int count) => ToHexa(bytes, 0, count);
-        public static string ToHexa(this byte[] bytes, int offset, int count)
-        {
-            if (bytes == null)
-                return "0x";
-
-            if (offset < 0)
-                throw new ArgumentException(null, nameof(offset));
-
-            if (count < 0)
-                throw new ArgumentException(null, nameof(count));
-
-            if (offset >= bytes.Length)
-                throw new ArgumentException(null, nameof(offset));
-
-            count = Math.Min(count, bytes.Length - offset);
-            var sb = new StringBuilder(count * 2);
-            for (int i = offset; i < (offset + count); i++)
-            {
-                sb.Append(bytes[i].ToString("X2"));
-            }
-            return "0x" + sb.ToString();
-        }
-
-        public static string ToHexaDump(string text) => ToHexaDump(text, null);
-        public static string ToHexaDump(string text, Encoding encoding)
-        {
-            if (text == null)
-                return null;
-
-            if (encoding == null)
-            {
-                encoding = Encoding.Unicode;
-            }
-
-            return ToHexaDump(encoding.GetBytes(text));
-        }
-
-        public static string ToHexaDump(this byte[] bytes)
-        {
-            if (bytes == null)
-                throw new ArgumentNullException(nameof(bytes));
-
-            return ToHexaDump(bytes, null);
-        }
-
-        public static string ToHexaDump(this byte[] bytes, string prefix)
-        {
-            if (bytes == null)
-                throw new ArgumentNullException(nameof(bytes));
-
-            return ToHexaDump(bytes, 0, bytes.Length, prefix, true);
-        }
-
-        public static string ToHexaDump(this IntPtr ptr, int count) => ToHexaDump(ptr, 0, count, null, true);
-        public static string ToHexaDump(this IntPtr ptr, int offset, int count, string prefix, bool addHeader)
-        {
-            if (ptr == IntPtr.Zero)
-                throw new ArgumentNullException(nameof(ptr));
-
-            var bytes = new byte[count];
-            Marshal.Copy(ptr, bytes, offset, count);
-            return ToHexaDump(bytes, 0, count, prefix, addHeader);
-        }
-
-        public static string ToHexaDump(this byte[] bytes, int count) => ToHexaDump(bytes, 0, count, null, true);
-        public static string ToHexaDump(this byte[] bytes, int offset, int count) => ToHexaDump(bytes, offset, count, null, true);
-        public static string ToHexaDump(this byte[] bytes, int offset, int count, string prefix, bool addHeader)
-        {
-            if (bytes == null)
-                throw new ArgumentNullException(nameof(bytes));
-
-            if (offset < 0)
-            {
-                offset = 0;
-            }
-
-            if (count < 0)
-            {
-                count = bytes.Length;
-            }
-
-            if ((offset + count) > bytes.Length)
-            {
-                count = bytes.Length - offset;
-            }
-
-            var sb = new StringBuilder();
-            if (addHeader)
-            {
-                sb.Append(prefix);
-                //             0         1         2         3         4         5         6         7
-                //             01234567890123456789012345678901234567890123456789012345678901234567890123456789
-                sb.AppendLine("Offset    00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F  0123456789ABCDEF");
-                sb.AppendLine("--------  -----------------------------------------------  ----------------");
-            }
-
-            for (int i = 0; i < count; i += 16)
-            {
-                sb.Append(prefix);
-                sb.AppendFormat("{0:X8}  ", i + offset);
-
-                int j = 0;
-                for (j = 0; (j < 16) && ((i + j) < count); j++)
-                {
-                    sb.AppendFormat("{0:X2} ", bytes[i + j + offset]);
-                }
-
-                sb.Append(" ");
-                if (j < 16)
-                {
-                    sb.Append(new string(' ', 3 * (16 - j)));
-                }
-                for (j = 0; j < 16 && (i + j) < count; j++)
-                {
-                    var b = bytes[i + j + offset];
-                    if (b > 31 && b < 128)
-                    {
-                        sb.Append((char)b);
-                    }
-                    else
-                    {
-                        sb.Append('.');
-                    }
-                }
-
-                sb.AppendLine();
-            }
-            return sb.ToString();
-        }
-
-        public static List<T> SplitToList<T>(string text, params char[] separators) => SplitToList<T>(text, null, separators);
-        public static List<T> SplitToList<T>(string text, IFormatProvider provider, params char[] separators)
+        public static IList<T> SplitToList<T>(string text, params char[] separators) => SplitToList<T>(text, null, separators);
+        public static IList<T> SplitToList<T>(string text, IFormatProvider provider, params char[] separators)
         {
             var al = new List<T>();
             if (text == null || separators == null || separators.Length == 0)
@@ -692,7 +560,7 @@ namespace CSharpMerge.Utilities
                 if (input.Length > 0 && input[0] == '-')
                 {
                     var ul = (long)EnumToUInt64(valuei);
-                    if (ul.ToString().EqualsIgnoreCase(input))
+                    if (ul.ToString(CultureInfo.CurrentCulture).EqualsIgnoreCase(input))
                     {
                         value = valuei;
                         return true;
@@ -701,7 +569,7 @@ namespace CSharpMerge.Utilities
                 else
                 {
                     var ul = EnumToUInt64(valuei);
-                    if (ul.ToString().EqualsIgnoreCase(input))
+                    if (ul.ToString(CultureInfo.CurrentCulture).EqualsIgnoreCase(input))
                     {
                         value = valuei;
                         return true;
@@ -958,8 +826,8 @@ namespace CSharpMerge.Utilities
             return ChangeType(str, defaultValue, provider);
         }
 
-        public static bool Compare<TKey, TValue>(this Dictionary<TKey, TValue> dic1, Dictionary<TKey, TValue> dic2) => Compare(dic1, dic2, null);
-        public static bool Compare<TKey, TValue>(this Dictionary<TKey, TValue> dic1, Dictionary<TKey, TValue> dic2, IEqualityComparer<TValue> comparer)
+        public static bool Compare<TKey, TValue>(this IDictionary<TKey, TValue> dic1, IDictionary<TKey, TValue> dic2) => Compare(dic1, dic2, null);
+        public static bool Compare<TKey, TValue>(this IDictionary<TKey, TValue> dic1, IDictionary<TKey, TValue> dic2, IEqualityComparer<TValue> comparer)
         {
             if (dic1 == null)
                 return dic2 == null;
@@ -995,7 +863,7 @@ namespace CSharpMerge.Utilities
             if (propertyNames == null || propertyNames == null)
                 return ToStringTable(enumerable);
 
-            return ToStringTable(enumerable, null, (p) => propertyNames.Contains(p.Name), null);
+            return ToStringTable(enumerable, null, (p) => propertyNames.Contains(p.Name, StringComparer.Ordinal), null);
         }
 
         public static string ToStringTable<T>(this IEnumerable<T> enumerable, Func<PropertyDescriptor, T, string> toStringFunc, params string[] propertyNames)
@@ -1003,7 +871,7 @@ namespace CSharpMerge.Utilities
             if (propertyNames == null || propertyNames == null)
                 return ToStringTable(enumerable);
 
-            return ToStringTable(enumerable, null, (p) => propertyNames.Contains(p.Name), toStringFunc);
+            return ToStringTable(enumerable, null, (p) => propertyNames.Contains(p.Name, StringComparer.Ordinal), toStringFunc);
         }
 
         public static string ToStringTable<T>(this IEnumerable<T> enumerable,
@@ -1082,7 +950,7 @@ namespace CSharpMerge.Utilities
             gridLine.Append('|');
             for (int i = 0; i < properties.Length; i++)
             {
-                sb.AppendFormat(" {0," + columnLengths[i] + "} |", properties[i].Name);
+                sb.AppendFormat(CultureInfo.CurrentCulture, " {0," + columnLengths[i] + "} |", properties[i].Name);
                 gridLine.Append(new string('-', columnLengths[i] + 2) + '|');
             }
             sb.AppendLine();
@@ -1093,7 +961,7 @@ namespace CSharpMerge.Utilities
                 sb.Append('|');
                 for (int i = 0; i < properties.Length; i++)
                 {
-                    sb.AppendFormat(" {0," + columnLengths[i] + "} |", rowValues[i]);
+                    sb.AppendFormat(CultureInfo.CurrentCulture, " {0," + columnLengths[i] + "} |", rowValues[i]);
                 }
                 sb.AppendLine();
             }
