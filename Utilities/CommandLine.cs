@@ -164,8 +164,8 @@ namespace CSharpMerge.Utilities
         {
             if (name == null)
                 throw new ArgumentNullException(nameof(name));
-
-            return _namedArguments.TryGetValue(name, out string s);
+            
+            return _namedArguments.TryGetValue(name, out _);
         }
 
         public static object GetArgument(string name, object defaultValue, Type conversionType) => GetArgument(name, defaultValue, conversionType, null);

@@ -60,6 +60,7 @@ namespace CSharpMerge
 
             outputFilePath = Path.GetFullPath(outputFilePath);
 
+            var internalize = CommandLine.GetArgument("internalize", false);
             var excludedFiles = Conversions.SplitToList<string>(CommandLine.GetNullifiedArgument("exclude"), ';');
             var commentsFiles = Conversions.SplitToList<string>(CommandLine.GetNullifiedArgument("comments", @"..\LICENSE"), ';');
             var encoding = Encoding.UTF8;
@@ -76,13 +77,14 @@ namespace CSharpMerge
                 }
             }
 
-            Console.WriteLine("Input    : " + inputDirectoryPath);
-            Console.WriteLine("Output   : " + outputFilePath);
-            Console.WriteLine("Encoding : " + encoding.WebName);
-            Console.WriteLine("Excluded : " + string.Join(", ", excludedFiles));
-            Console.WriteLine("Comments : " + string.Join(", ", commentsFiles));
+            Console.WriteLine("Input       : " + inputDirectoryPath);
+            Console.WriteLine("Output      : " + outputFilePath);
+            Console.WriteLine("Internalize : " + internalize);
+            Console.WriteLine("Encoding    : " + encoding.WebName);
+            Console.WriteLine("Excluded    : " + string.Join(", ", excludedFiles));
+            Console.WriteLine("Comments    : " + string.Join(", ", commentsFiles));
             Console.WriteLine();
-            Merge(inputDirectoryPath, outputFilePath, encoding, excludedFiles, commentsFiles);
+            Merge(inputDirectoryPath, outputFilePath, encoding, excludedFiles, commentsFiles, internalize);
         }
 
         static void Help()
@@ -129,7 +131,7 @@ namespace CSharpMerge
             return sb.ToString();
         }
 
-        static void Merge(string inputDirectoryPath, string outputFilePath, Encoding encoding, IList<string> excludedFiles, IList<string> commentsFiles)
+        static void Merge(string inputDirectoryPath, string outputFilePath, Encoding encoding, IList<string> excludedFiles, IList<string> commentsFiles, bool internalize)
         {
             bool incai = CommandLine.GetArgument("incai", false);
             bool incgs = CommandLine.GetArgument("incgs", false);
@@ -187,6 +189,44 @@ namespace CSharpMerge
 
                 var tree = CSharpSyntaxTree.ParseText(text);
                 var root = (CompilationUnitSyntax)tree.GetRoot();
+
+                if (internalize)
+                {
+                    var publicTypes = new List<BaseTypeDeclarationSyntax>();
+                    foreach (var rootMember in root.Members)
+                    {
+                        if (rootMember is NamespaceDeclarationSyntax ns)
+                        {
+                            foreach (var member in ns.Members)
+                            {
+                                if (member is BaseTypeDeclarationSyntax type)
+                                {
+                                    if (member.Modifiers.Any(m => m.ValueText == "public"))
+                                    {
+                                        publicTypes.Add(type);
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (publicTypes.Count > 0)
+                    {
+                        var dic = new Dictionary<BaseTypeDeclarationSyntax, BaseTypeDeclarationSyntax>();
+
+                        foreach (var publicType in publicTypes)
+                        {
+                            var publicToken = publicType.Modifiers.First(m => m.ValueText == "public");
+                            var modifiers = publicType.Modifiers.Remove(publicToken).Add(SyntaxFactory.Identifier("internal "));
+
+                            var internalType = publicType.WithModifiers(modifiers);
+                            dic[publicType] = internalType;
+                        }
+
+                        root = root.ReplaceNodes(publicTypes, (publ, inte) => dic[publ]);
+                    }
+                }
+
                 foreach (var us in root.Usings)
                 {
                     usings.Add(us.ToString());
