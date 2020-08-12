@@ -35,7 +35,7 @@ namespace CSharpMerge
 
         static void SafeMain(string[] args)
         {
-            Console.WriteLine("CSharpMerge - Copyright (C) 2016-" + DateTime.Now.Year + " Simon Mourier. All rights reserved.");
+            Console.WriteLine("CSharpMerge - Copyright (C) 2017-" + DateTime.Now.Year + " Simon Mourier. All rights reserved.");
             Console.WriteLine();
             if (CommandLine.HelpRequested || args.Length < 2)
             {
@@ -95,7 +95,7 @@ namespace CSharpMerge
             Console.WriteLine("    This tool is used to merge .CS files from a directory into a single .CS file.");
             Console.WriteLine();
             Console.WriteLine("Options:");
-            Console.WriteLine("    /incai               Includes files whose name ends with 'AssemblyInfo.cs'. Default is false.");
+            Console.WriteLine("    /incai               Includes files whose name ends with 'AssemblyInfo.cs' or 'AssemblyAttributes.cs'. Default is false.");
             Console.WriteLine("    /incgs               Includes files whose name ends with 'GlobalSuppressions.cs'. Default is false.");
             Console.WriteLine("    /toponly             Includes only the current directory in a search operation. Default is false (recursive).");
             Console.WriteLine("    /encoding:<enc>      Defines the encoding to use for the output file path. Default is '" + Encoding.UTF8.WebName + "'.");
@@ -165,7 +165,7 @@ namespace CSharpMerge
                     continue;
                 }
 
-                if (!incai && name.EndsWith("AssemblyInfo.cs", StringComparison.OrdinalIgnoreCase))
+                if (!incai && (name.EndsWith("AssemblyInfo.cs", StringComparison.OrdinalIgnoreCase) || name.EndsWith("AssemblyAttributes.cs", StringComparison.OrdinalIgnoreCase)))
                 {
                     Console.WriteLine("Skip " + file);
                     continue;
