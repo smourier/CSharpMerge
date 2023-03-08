@@ -43,8 +43,8 @@ namespace CSharpMerge
                 return;
             }
 
-            string inputDirectoryPath = CommandLine.GetArgument<string>(0);
-            string outputFilePath = CommandLine.GetArgument<string>(1);
+            var inputDirectoryPath = CommandLine.GetArgument<string>(0);
+            var outputFilePath = CommandLine.GetArgument<string>(1);
             if (inputDirectoryPath == null || outputFilePath == null)
             {
                 Help();
@@ -63,6 +63,7 @@ namespace CSharpMerge
             var internalize = CommandLine.GetArgument("internalize", false);
             var excludedFiles = Conversions.SplitToList<string>(CommandLine.GetNullifiedArgument("exclude"), ';');
             var commentsFiles = Conversions.SplitToList<string>(CommandLine.GetNullifiedArgument("comments", @"..\LICENSE"), ';');
+            var nullable = CommandLine.GetNullifiedArgument("nullable");
             var encoding = Encoding.UTF8;
             var enc = CommandLine.GetNullifiedArgument("encoding");
             if (enc != null)
@@ -84,7 +85,7 @@ namespace CSharpMerge
             Console.WriteLine("Excluded    : " + string.Join(", ", excludedFiles));
             Console.WriteLine("Comments    : " + string.Join(", ", commentsFiles));
             Console.WriteLine();
-            Merge(inputDirectoryPath, outputFilePath, encoding, excludedFiles, commentsFiles, internalize);
+            Merge(inputDirectoryPath, outputFilePath, encoding, excludedFiles, commentsFiles, internalize, nullable);
         }
 
         static void Help()
@@ -101,6 +102,7 @@ namespace CSharpMerge
             Console.WriteLine("    /encoding:<enc>      Defines the encoding to use for the output file path. Default is '" + Encoding.UTF8.WebName + "'.");
             Console.WriteLine("    /exclude:<files>     Defines a list of file paths or names separated by ';'. Default is none.");
             Console.WriteLine("    /comments:<files>    Defines a list of file paths or names separated by ';' used as comments. Default is ..\\LICENSE.");
+            Console.WriteLine("    /nullable:<text>     Adds nullable directive. Default is no directive.");
             Console.WriteLine();
             Console.WriteLine("Examples:");
             Console.WriteLine();
@@ -131,11 +133,11 @@ namespace CSharpMerge
             return sb.ToString();
         }
 
-        static void Merge(string inputDirectoryPath, string outputFilePath, Encoding encoding, IList<string> excludedFiles, IList<string> commentsFiles, bool internalize)
+        static void Merge(string inputDirectoryPath, string outputFilePath, Encoding encoding, IList<string> excludedFiles, IList<string> commentsFiles, bool internalize, string nullable)
         {
-            bool incai = CommandLine.GetArgument("incai", false);
-            bool incgs = CommandLine.GetArgument("incgs", false);
-            bool topdir = CommandLine.GetArgument("toponly", false);
+            var incai = CommandLine.GetArgument("incai", false);
+            var incgs = CommandLine.GetArgument("incgs", false);
+            var topdir = CommandLine.GetArgument("toponly", false);
             var option = SearchOption.TopDirectoryOnly;
             if (!topdir)
             {
@@ -147,7 +149,7 @@ namespace CSharpMerge
             var codes = new List<string>();
             foreach (var file in Directory.GetFiles(inputDirectoryPath, "*.*", option))
             {
-                string name = Path.GetFileName(file);
+                var name = Path.GetFileName(file);
 
                 if (commentsFiles.Contains(name, StringComparer.OrdinalIgnoreCase) || commentsFiles.Contains(file, StringComparer.OrdinalIgnoreCase))
                 {
@@ -184,7 +186,7 @@ namespace CSharpMerge
                 }
 
                 var enc = DetectEncoding(file);
-                string text = File.ReadAllText(file, enc);
+                var text = File.ReadAllText(file, enc);
                 Console.WriteLine(file + ", encoding: " + enc.WebName);
 
                 var tree = CSharpSyntaxTree.ParseText(text);
@@ -239,7 +241,7 @@ namespace CSharpMerge
             // scan for comments in all places
             foreach (var commentFile in commentsFiles)
             {
-                string path = Path.GetFullPath(Path.Combine(inputDirectoryPath, commentFile));
+                var path = Path.GetFullPath(Path.Combine(inputDirectoryPath, commentFile));
                 if (File.Exists(path))
                 {
                     Console.WriteLine("Comment " + path);
@@ -253,10 +255,16 @@ namespace CSharpMerge
             // bit of a hack... seems to work for me so far :-)
             using (var writer = new StreamWriter(outputFilePath, false, encoding))
             {
+                if (nullable != null)
+                {
+                    writer.Write("#nullable ");
+                    writer.WriteLine(nullable);
+                }
+
                 foreach (var file in comments)
                 {
                     var enc = DetectEncoding(file);
-                    string comment = File.ReadAllText(file, enc);
+                    var comment = File.ReadAllText(file, enc);
                     writer.WriteLine("/*");
                     writer.Write(NormalizeLineEndings(comment));
                     writer.WriteLine("*/");
