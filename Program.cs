@@ -249,6 +249,20 @@ namespace CSharpMerge
                 }
             }
 
+            // sort out global vs non global ns...
+            foreach (var us in usings.ToArray())
+            {
+                if (!us.StartsWith("global "))
+                {
+                    var ns = us.Split(new[] { "using " }, StringSplitOptions.None)[1];
+                    var globalUsing = "global using global::" + ns;
+                    if (usings.Contains(globalUsing))
+                    {
+                        usings.Remove(us);
+                    }
+                }
+            }
+
             var uss = usings.ToList();
             uss.Sort();
 
