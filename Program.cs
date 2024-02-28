@@ -103,6 +103,7 @@ namespace CSharpMerge
             Console.WriteLine("    /exclude:<files>     Defines a list of file paths or names separated by ';'. Default is none.");
             Console.WriteLine("    /comments:<files>    Defines a list of file paths or names separated by ';' used as comments. Default is ..\\LICENSE.");
             Console.WriteLine("    /nullable:<text>     Adds nullable directive. Default is no directive.");
+            Console.WriteLine("    /internalize         Internalize all classes.");
             Console.WriteLine();
             Console.WriteLine("Examples:");
             Console.WriteLine();
