@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text;
+using System.Text.RegularExpressions;
 using CSharpMerge.Utilities;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -15,6 +16,8 @@ namespace CSharpMerge
 {
     class Program
     {
+        private static readonly Regex _versionRegex = new Regex(@"\s*\[\s*assembly:\s*Assembly\s*(?<name>.*)Version?\s*\(""(?<version>.*?)""\)\]");
+
         static void Main(string[] args)
         {
             if (Debugger.IsAttached)
@@ -96,7 +99,10 @@ namespace CSharpMerge
             Console.WriteLine("    This tool is used to merge .CS files from a directory into a single .CS file.");
             Console.WriteLine();
             Console.WriteLine("Options:");
-            Console.WriteLine("    /incai               Includes files whose name ends with 'AssemblyInfo.cs', 'AssemblyVersionInfo.cs' or 'AssemblyAttributes.cs'. Default is false.");
+            Console.WriteLine("    /incai               Includes files whose name ends with 'AssemblyInfo.cs', 'AssemblyVersionInfo.cs'");
+            Console.WriteLine("                         or 'AssemblyAttributes.cs'. Default is false.");
+            Console.WriteLine("    /incav               Includes assembly version information from files whose name ends with 'AssemblyInfo.cs',");
+            Console.WriteLine("                         'AssemblyVersionInfo.cs' or 'AssemblyAttributes.cs'. Default is reverse of /incai.");
             Console.WriteLine("    /incgs               Includes files whose name ends with 'GlobalSuppressions.cs'. Default is false.");
             Console.WriteLine("    /toponly             Includes only the current directory in a search operation. Default is false (recursive).");
             Console.WriteLine("    /encoding:<enc>      Defines the encoding to use for the output file path. Default is '" + Encoding.UTF8.WebName + "'.");
@@ -137,6 +143,7 @@ namespace CSharpMerge
         static void Merge(string inputDirectoryPath, string outputFilePath, Encoding encoding, IList<string> excludedFiles, IList<string> commentsFiles, bool internalize, string nullable)
         {
             var incai = CommandLine.GetArgument("incai", false);
+            var incav = CommandLine.GetArgument("incav", !incai);
             var incgs = CommandLine.GetArgument("incgs", false);
             var topdir = CommandLine.GetArgument("toponly", false);
             var option = SearchOption.TopDirectoryOnly;
@@ -147,6 +154,7 @@ namespace CSharpMerge
 
             var usings = new HashSet<string>(StringComparer.Ordinal);
             var comments = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var commentTexts = new List<string>();
             var codes = new List<string>();
             foreach (var file in Directory.GetFiles(inputDirectoryPath, "*.*", option))
             {
@@ -173,6 +181,18 @@ namespace CSharpMerge
                     name.EndsWith("AssemblyAttributes.cs", StringComparison.OrdinalIgnoreCase)))
                 {
                     Console.WriteLine("Skip " + file);
+
+                    if (incav)
+                    {
+                        var allText = File.ReadAllText(file);
+                        foreach (var match in _versionRegex.Matches(allText).OfType<Match>())
+                        {
+                            var matchName = match.Groups["name"].Value;
+                            var matchVersion = match.Groups["version"].Value;
+
+                            commentTexts.Add($"Assembly{matchName}Version: {matchVersion}");
+                        }
+                    }
                     continue;
                 }
 
@@ -284,6 +304,16 @@ namespace CSharpMerge
                     var comment = File.ReadAllText(file, enc);
                     writer.WriteLine("/*");
                     writer.Write(NormalizeLineEndings(comment));
+                    writer.WriteLine("*/");
+                }
+
+                if (commentTexts.Count > 0)
+                {
+                    writer.WriteLine("/*");
+                    foreach (var commentText in commentTexts)
+                    {
+                        writer.WriteLine(commentText);
+                    }
                     writer.WriteLine("*/");
                 }
 
