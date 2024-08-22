@@ -63,6 +63,7 @@ namespace CSharpMerge
 
             outputFilePath = Path.GetFullPath(outputFilePath);
 
+            var nosonar = CommandLine.GetArgument("nosonar", true);
             var internalize = CommandLine.GetArgument("internalize", false);
             var excludedFiles = Conversions.SplitToList<string>(CommandLine.GetNullifiedArgument("exclude"), ';');
             var commentsFiles = Conversions.SplitToList<string>(CommandLine.GetNullifiedArgument("comments", @"..\LICENSE"), ';');
@@ -84,11 +85,12 @@ namespace CSharpMerge
             Console.WriteLine("Input       : " + inputDirectoryPath);
             Console.WriteLine("Output      : " + outputFilePath);
             Console.WriteLine("Internalize : " + internalize);
+            Console.WriteLine("No Sonar    : " + nosonar);
             Console.WriteLine("Encoding    : " + encoding.WebName);
             Console.WriteLine("Excluded    : " + string.Join(", ", excludedFiles));
             Console.WriteLine("Comments    : " + string.Join(", ", commentsFiles));
             Console.WriteLine();
-            Merge(inputDirectoryPath, outputFilePath, encoding, excludedFiles, commentsFiles, internalize, nullable);
+            Merge(inputDirectoryPath, outputFilePath, encoding, excludedFiles, commentsFiles, internalize, nosonar, nullable);
         }
 
         static void Help()
@@ -110,6 +112,7 @@ namespace CSharpMerge
             Console.WriteLine("    /comments:<files>    Defines a list of file paths or names separated by ';' used as comments. Default is ..\\LICENSE.");
             Console.WriteLine("    /nullable:<text>     Adds nullable directive. Default is no directive.");
             Console.WriteLine("    /internalize         Internalize all classes.");
+            Console.WriteLine("    /nosonar             Add NOSONAR.");
             Console.WriteLine();
             Console.WriteLine("Examples:");
             Console.WriteLine();
@@ -140,7 +143,7 @@ namespace CSharpMerge
             return sb.ToString();
         }
 
-        static void Merge(string inputDirectoryPath, string outputFilePath, Encoding encoding, IList<string> excludedFiles, IList<string> commentsFiles, bool internalize, string nullable)
+        static void Merge(string inputDirectoryPath, string outputFilePath, Encoding encoding, IList<string> excludedFiles, IList<string> commentsFiles, bool internalize, bool nosonar, string nullable)
         {
             var incai = CommandLine.GetArgument("incai", false);
             var incav = CommandLine.GetArgument("incav", !incai);
@@ -292,6 +295,11 @@ namespace CSharpMerge
             // bit of a hack... seems to work for me so far :-)
             using (var writer = new StreamWriter(outputFilePath, false, encoding))
             {
+                if (nosonar)
+                {
+                    writer.WriteLine("//NOSONAR");
+                }
+
                 if (nullable != null)
                 {
                     writer.Write("#nullable ");
@@ -323,10 +331,15 @@ namespace CSharpMerge
                 }
 
                 writer.WriteLine();
+                writer.WriteLine("#pragma warning disable IDE0079 // Remove unnecessary suppression");
+                writer.WriteLine("#pragma warning disable IDE0130 // Namespace does not match folder structure");
+                writer.WriteLine();
                 foreach (var code in codes)
                 {
                     writer.WriteLine(NormalizeLineEndings(code));
                 }
+                writer.WriteLine("#pragma warning restore IDE0130 // Namespace does not match folder structure");
+                writer.WriteLine("#pragma warning restore IDE0079 // Remove unnecessary suppression");
             }
         }
     }
