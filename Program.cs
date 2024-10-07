@@ -139,7 +139,7 @@ namespace CSharpMerge
                 return text;
 
             var sb = new StringBuilder(text);
-            sb.Replace("\r", "").Replace("\n", newLine);
+            sb.Replace("\r", string.Empty).Replace("\n", newLine);
             return sb.ToString();
         }
 
@@ -158,7 +158,7 @@ namespace CSharpMerge
             var usings = new HashSet<string>(StringComparer.Ordinal);
             var comments = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var commentTexts = new List<string>();
-            var codes = new List<string>();
+            var codes = new Dictionary<string, List<string>>();
             foreach (var file in Directory.GetFiles(inputDirectoryPath, "*.*", option))
             {
                 var name = Path.GetFileName(file);
@@ -260,8 +260,48 @@ namespace CSharpMerge
                     usings.Add(us.ToString());
                 }
 
-                var withoutUsings = root.WithUsings(new SyntaxList<UsingDirectiveSyntax>());
-                codes.Add(withoutUsings.ToString());
+                foreach (var rootMember in root.Members)
+                {
+                    // only one file-scoped namespace decl
+                    if (rootMember is FileScopedNamespaceDeclarationSyntax fns)
+                    {
+                        addNamespace(fns.Name.ToString(), fns.Members);
+                        continue;
+                    }
+
+                    if (rootMember is NamespaceDeclarationSyntax ns)
+                    {
+                        addNamespace(ns.Name.ToString(), ns.Members);
+                        continue;
+                    }
+
+                    void addNamespace(string nsName, SyntaxList<MemberDeclarationSyntax> members)
+                    {
+                        var sb = new StringBuilder();
+                        for (var i = 0; i < members.Count; i++)
+                        {
+                            var member = members[i];
+                            var annotations = member.WithAdditionalAnnotations();
+                            sb.AppendLine(annotations.ToString());
+                            if (i != members.Count - 1)
+                            {
+                                sb.AppendLine();
+                            }
+                        }
+
+                        if (!codes.TryGetValue(nsName, out var codeList))
+                        {
+                            codeList = new List<string>();
+                            codes.Add(nsName, codeList);
+                        }
+                        else
+                        {
+                            codeList.Add(Environment.NewLine);
+                        }
+
+                        codeList.Add(sb.ToString());
+                    }
+                }
             }
 
             // scan for comments in all places
@@ -334,13 +374,40 @@ namespace CSharpMerge
                 writer.WriteLine("#pragma warning disable IDE0079 // Remove unnecessary suppression");
                 writer.WriteLine("#pragma warning disable IDE0130 // Namespace does not match folder structure");
                 writer.WriteLine();
-                foreach (var code in codes)
+                foreach (var group in codes.GroupBy(k => k.Key).OrderBy(g => g.Key))
                 {
-                    writer.WriteLine(NormalizeLineEndings(code));
+                    foreach (var kv in group)
+                    {
+                        writer.WriteLine("namespace " + kv.Key);
+                        writer.WriteLine("{");
+                        foreach (var lines in kv.Value)
+                        {
+                            using (var reader = new StringReader(lines))
+                            {
+                                do
+                                {
+                                    var line = reader.ReadLine();
+                                    if (line == null)
+                                        break;
+
+                                    writer.WriteLine("\t" + NormalizeLineEndings(line));
+                                }
+                                while (true);
+                            }
+                        }
+                        writer.WriteLine("}");
+                        writer.WriteLine();
+                    }
                 }
                 writer.WriteLine("#pragma warning restore IDE0130 // Namespace does not match folder structure");
                 writer.WriteLine("#pragma warning restore IDE0079 // Remove unnecessary suppression");
             }
         }
+    }
+
+    class CodeByNamespace
+    {
+        public string Code;
+        public string Namespace;
     }
 }
