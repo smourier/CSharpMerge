@@ -1,189 +1,183 @@
 ﻿using System;
 using System.Collections.Generic;
 
-namespace CSharpMerge.Utilities
+namespace CSharpMerge.Utilities;
+
+public static class CommandLine
 {
-    public static class CommandLine
+    private static readonly Dictionary<string, string> _namedArguments;
+    private static readonly Dictionary<int, string> _positionArguments;
+
+    static CommandLine()
     {
-        private static readonly Dictionary<string, string> _namedArguments;
-        private static readonly Dictionary<int, string> _positionArguments;
+        _namedArguments = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        _positionArguments = [];
 
-        static CommandLine()
+        string[] args = Environment.GetCommandLineArgs();
+
+        for (int i = 0; i < args.Length; i++)
         {
-            _namedArguments = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            _positionArguments = new Dictionary<int, string>();
+            if (i == 0)
+                continue;
 
-            string[] args = Environment.GetCommandLineArgs();
+            string arg = args[i].Nullify();
+            if (arg == null)
+                continue;
 
-            for (int i = 0; i < args.Length; i++)
+            if (string.Equals(arg, "/?", StringComparison.Ordinal) ||
+                string.Equals(arg, "-?", StringComparison.Ordinal) ||
+                string.Equals(arg, "/HELP", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(arg, "-HELP", StringComparison.OrdinalIgnoreCase))
             {
-                if (i == 0)
-                    continue;
+                HelpRequested = true;
+            }
 
-                string arg = args[i].Nullify();
-                if (arg == null)
-                    continue;
+            bool named = false;
+            if (arg[0] == '-' || arg[0] == '/')
+            {
+                arg = arg[1..];
+                named = true;
+            }
 
-                if (string.Equals(arg, "/?", StringComparison.Ordinal) ||
-                    string.Equals(arg, "-?", StringComparison.Ordinal) ||
-                    string.Equals(arg, "/HELP", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(arg, "-HELP", StringComparison.OrdinalIgnoreCase))
-                {
-                    HelpRequested = true;
-                }
+            string name;
+            string value;
+            int pos = arg.IndexOf(':');
+            if (pos < 0)
+            {
+                name = arg;
+                value = null;
+            }
+            else
+            {
+                name = arg[..pos].Trim();
+                value = arg[(pos + 1)..].Trim();
+            }
 
-                bool named = false;
-                if (arg[0] == '-' || arg[0] == '/')
-                {
-                    arg = arg.Substring(1);
-                    named = true;
-                }
-
-                string name;
-                string value;
-                int pos = arg.IndexOf(':');
-                if (pos < 0)
-                {
-                    name = arg;
-                    value = null;
-                }
-                else
-                {
-                    name = arg.Substring(0, pos).Trim();
-                    value = arg.Substring(pos + 1).Trim();
-                }
-
-                _positionArguments[i - 1] = arg;
-                if (named)
-                {
-                    _namedArguments[name] = value;
-                }
+            _positionArguments[i - 1] = arg;
+            if (named)
+            {
+                _namedArguments[name] = value;
             }
         }
+    }
 
-        public static IReadOnlyDictionary<string, string> NamedArguments => _namedArguments;
-        public static IReadOnlyDictionary<int, string> PositionArguments => _positionArguments;
-        public static bool HelpRequested { get; }
+    public static IReadOnlyDictionary<string, string> NamedArguments => _namedArguments;
+    public static IReadOnlyDictionary<int, string> PositionArguments => _positionArguments;
+    public static bool HelpRequested { get; }
 
-        public static string CommandLineWithoutExe
+    public static string CommandLineWithoutExe
+    {
+        get
         {
-            get
+            string line = Environment.CommandLine;
+            bool inParens = false;
+            for (int i = 0; i < line.Length; i++)
             {
-                string line = Environment.CommandLine;
-                bool inParens = false;
-                for (int i = 0; i < line.Length; i++)
-                {
-                    if (line[i] == ' ' && !inParens)
-                        return line.Substring(i + 1).TrimStart();
+                if (line[i] == ' ' && !inParens)
+                    return line[(i + 1)..].TrimStart();
 
-                    if (line[i] == '"')
-                    {
-                        inParens = !inParens;
-                    }
+                if (line[i] == '"')
+                {
+                    inParens = !inParens;
                 }
-                return line;
             }
+            return line;
         }
+    }
 
-        public static T GetArgument<T>(IEnumerable<string> arguments, string name, T defaultValue)
-        {
-            if (arguments == null)
-                return defaultValue;
-
-            foreach (string arg in arguments)
-            {
-                if (arg.StartsWith("-", StringComparison.Ordinal) || arg.StartsWith("/", StringComparison.Ordinal))
-                {
-                    int pos = arg.IndexOfAny(new[] { '=', ':' }, 1);
-                    string argName = pos < 0 ? arg.Substring(1) : arg.Substring(1, pos - 1);
-                    if (string.Compare(name, argName, StringComparison.OrdinalIgnoreCase) == 0)
-                    {
-                        string value = pos < 0 ? string.Empty : arg.Substring(pos + 1).Trim();
-                        if (value.Length == 0)
-                        {
-                            if (typeof(T) == typeof(bool)) // special case for bool args: if it's there, return true
-                                return (T)(object)true;
-
-                            return defaultValue;
-                        }
-                        return Conversions.ChangeType(value, defaultValue);
-                    }
-                }
-            }
+    public static T GetArgument<T>(IEnumerable<string> arguments, string name, T defaultValue)
+    {
+        if (arguments == null)
             return defaultValue;
-        }
 
-        public static string GetNullifiedArgument(string name) => GetNullifiedArgument(name, null);
-        public static string GetNullifiedArgument(string name, string defaultValue)
+        foreach (string arg in arguments)
         {
-            if (name == null)
-                throw new ArgumentNullException(nameof(name));
+            if (arg.StartsWith('-') || arg.StartsWith('/'))
+            {
+                int pos = arg.IndexOfAny(['=', ':'], 1);
+                string argName = pos < 0 ? arg[1..] : arg[1..pos];
+                if (string.Compare(name, argName, StringComparison.OrdinalIgnoreCase) == 0)
+                {
+                    string value = pos < 0 ? string.Empty : arg[(pos + 1)..].Trim();
+                    if (value.Length == 0)
+                    {
+                        if (typeof(T) == typeof(bool)) // special case for bool args: if it's there, return true
+                            return (T)(object)true;
 
-            if (!_namedArguments.TryGetValue(name, out string s))
-                return defaultValue.Nullify();
-
-            return s.Nullify();
+                        return defaultValue;
+                    }
+                    return Conversions.ChangeType(value, defaultValue);
+                }
+            }
         }
+        return defaultValue;
+    }
 
-        public static T GetArgument<T>(int index) => GetArgument(index, default(T));
-        public static T GetArgument<T>(int index, T defaultValue) => GetArgument(index, defaultValue, null);
-        public static T GetArgument<T>(int index, T defaultValue, IFormatProvider provider)
-        {
-            if (!_positionArguments.TryGetValue(index, out string s))
-                return defaultValue;
+    public static string GetNullifiedArgument(string name) => GetNullifiedArgument(name, null);
+    public static string GetNullifiedArgument(string name, string defaultValue)
+    {
+        ArgumentNullException.ThrowIfNull(name);
 
-            return Conversions.ChangeType(s, defaultValue, provider);
-        }
+        if (!_namedArguments.TryGetValue(name, out string s))
+            return defaultValue.Nullify();
 
-        public static object GetArgument(int index, object defaultValue, Type conversionType) => GetArgument(index, defaultValue, conversionType, null);
-        public static object GetArgument(int index, object defaultValue, Type conversionType, IFormatProvider provider)
-        {
-            if (!_positionArguments.TryGetValue(index, out string s))
-                return defaultValue;
+        return s.Nullify();
+    }
 
-            return Conversions.ChangeType(s, conversionType, defaultValue, provider);
-        }
+    public static T GetArgument<T>(int index) => GetArgument(index, default(T));
+    public static T GetArgument<T>(int index, T defaultValue) => GetArgument(index, defaultValue, null);
+    public static T GetArgument<T>(int index, T defaultValue, IFormatProvider provider)
+    {
+        if (!_positionArguments.TryGetValue(index, out string s))
+            return defaultValue;
 
-        public static T GetArgument<T>(string name) => GetArgument(name, default(T));
-        public static T GetArgument<T>(string name, T defaultValue) => GetArgument(name, defaultValue, null);
-        public static T GetArgument<T>(string name, T defaultValue, IFormatProvider provider)
-        {
-            if (name == null)
-                throw new ArgumentNullException(nameof(name));
+        return Conversions.ChangeType(s, defaultValue, provider);
+    }
 
-            if (!_namedArguments.TryGetValue(name, out string s))
-                return defaultValue;
+    public static object GetArgument(int index, object defaultValue, Type conversionType) => GetArgument(index, defaultValue, conversionType, null);
+    public static object GetArgument(int index, object defaultValue, Type conversionType, IFormatProvider provider)
+    {
+        if (!_positionArguments.TryGetValue(index, out string s))
+            return defaultValue;
 
-            if (typeof(T) == typeof(bool) && string.IsNullOrEmpty(s))
-                return (T)(object)true;
+        return Conversions.ChangeType(s, conversionType, defaultValue, provider);
+    }
 
-            return Conversions.ChangeType(s, defaultValue, provider);
-        }
+    public static T GetArgument<T>(string name) => GetArgument(name, default(T));
+    public static T GetArgument<T>(string name, T defaultValue) => GetArgument(name, defaultValue, null);
+    public static T GetArgument<T>(string name, T defaultValue, IFormatProvider provider)
+    {
+        ArgumentNullException.ThrowIfNull(name);
 
-        public static bool HasArgument(string name)
-        {
-            if (name == null)
-                throw new ArgumentNullException(nameof(name));
-            
-            return _namedArguments.TryGetValue(name, out _);
-        }
+        if (!_namedArguments.TryGetValue(name, out string s))
+            return defaultValue;
 
-        public static object GetArgument(string name, object defaultValue, Type conversionType) => GetArgument(name, defaultValue, conversionType, null);
-        public static object GetArgument(string name, object defaultValue, Type conversionType, IFormatProvider provider)
-        {
-            if (name == null)
-                throw new ArgumentNullException(nameof(name));
+        if (typeof(T) == typeof(bool) && string.IsNullOrEmpty(s))
+            return (T)(object)true;
 
-            if (conversionType == null)
-                throw new ArgumentNullException(nameof(conversionType));
+        return Conversions.ChangeType(s, defaultValue, provider);
+    }
 
-            if (!_namedArguments.TryGetValue(name, out string s))
-                return defaultValue;
+    public static bool HasArgument(string name)
+    {
+        ArgumentNullException.ThrowIfNull(name);
 
-            if (conversionType == typeof(bool) && string.IsNullOrEmpty(s))
-                return true;
+        return _namedArguments.TryGetValue(name, out _);
+    }
 
-            return Conversions.ChangeType(s, conversionType, defaultValue, provider);
-        }
+    public static object GetArgument(string name, object defaultValue, Type conversionType) => GetArgument(name, defaultValue, conversionType, null);
+    public static object GetArgument(string name, object defaultValue, Type conversionType, IFormatProvider provider)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+
+        ArgumentNullException.ThrowIfNull(conversionType);
+
+        if (!_namedArguments.TryGetValue(name, out string s))
+            return defaultValue;
+
+        if (conversionType == typeof(bool) && string.IsNullOrEmpty(s))
+            return true;
+
+        return Conversions.ChangeType(s, conversionType, defaultValue, provider);
     }
 }
