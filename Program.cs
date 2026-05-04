@@ -157,6 +157,15 @@ partial class Program
         return sb.ToString();
     }
 
+    private sealed class Ns(string text, UsingDirectiveSyntax first)
+    {
+        public string Text { get; } = text;
+        public List<UsingDirectiveSyntax> Usings { get; } = [first];
+        public bool HasPublicTypes { get; set; }
+
+        public override string ToString() => Text;
+    }
+
     static void Merge(
         string inputDirectoryPath,
         string outputFilePath,
@@ -179,10 +188,11 @@ partial class Program
             option |= SearchOption.AllDirectories;
         }
 
-        var usings = new HashSet<string>(StringComparer.Ordinal);
+        var usings = new Dictionary<string, List<Ns>>(StringComparer.Ordinal);
         var comments = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var commentTexts = new List<string>();
         var codes = new Dictionary<string, List<string>>();
+        var publicTypes = new Dictionary<string, BaseTypeDeclarationSyntax>();
         foreach (var file in Directory.GetFiles(inputDirectoryPath, "*.*", option))
         {
             var name = Path.GetFileName(file);
@@ -246,46 +256,63 @@ partial class Program
             var tree = CSharpSyntaxTree.ParseText(text, options);
             var root = (CompilationUnitSyntax)tree.GetRoot();
 
-            if (internalize)
+            foreach (var rootMember in root.Members)
             {
-                var publicTypes = new List<BaseTypeDeclarationSyntax>();
-                foreach (var rootMember in root.Members)
+                if (rootMember is NamespaceDeclarationSyntax ns)
                 {
-                    if (rootMember is NamespaceDeclarationSyntax ns)
+                    foreach (var member in ns.Members)
                     {
-                        foreach (var member in ns.Members)
+                        if (member is BaseTypeDeclarationSyntax type)
                         {
-                            if (member is BaseTypeDeclarationSyntax type)
+                            if (member.Modifiers.Any(m => m.ValueText == "public"))
                             {
-                                if (member.Modifiers.Any(m => m.ValueText == "public"))
-                                {
-                                    publicTypes.Add(type);
-                                }
+                                publicTypes[ns.Name + "." + type.Identifier.Text] = type;
                             }
                         }
                     }
                 }
-
-                if (publicTypes.Count > 0)
+                else if (rootMember is FileScopedNamespaceDeclarationSyntax fns)
                 {
-                    var dic = new Dictionary<BaseTypeDeclarationSyntax, BaseTypeDeclarationSyntax>();
-
-                    foreach (var publicType in publicTypes)
+                    foreach (var member in fns.Members)
                     {
-                        var publicToken = publicType.Modifiers.First(m => m.ValueText == "public");
-                        var modifiers = publicType.Modifiers.Remove(publicToken).Add(SyntaxFactory.Identifier("internal "));
-
-                        var internalType = publicType.WithModifiers(modifiers);
-                        dic[publicType] = internalType;
+                        if (member is BaseTypeDeclarationSyntax type)
+                        {
+                            if (member.Modifiers.Any(m => m.ValueText == "public"))
+                            {
+                                publicTypes[fns.Name + "." + type.Identifier.Text] = type;
+                            }
+                        }
                     }
-
-                    root = root.ReplaceNodes(publicTypes, (publ, inte) => dic[publ]);
                 }
+            }
+
+            if (internalize && publicTypes.Count > 0)
+            {
+                var dic = new Dictionary<BaseTypeDeclarationSyntax, BaseTypeDeclarationSyntax>();
+                foreach (var kv in publicTypes)
+                {
+                    var publicType = kv.Value;
+                    var publicToken = publicType.Modifiers.First(m => m.ValueText == "public");
+                    var modifiers = publicType.Modifiers.Remove(publicToken).Add(SyntaxFactory.Identifier("internal "));
+
+                    var internalType = publicType.WithModifiers(modifiers);
+                    dic[publicType] = internalType;
+                }
+
+                root = root.ReplaceNodes(publicTypes.Values, (publ, inte) => dic[publ]);
             }
 
             foreach (var us in root.Usings)
             {
-                usings.Add(us.ToString());
+                var key = us.ToString();
+                if (!usings.TryGetValue(key, out var list))
+                {
+                    list = [new Ns(key, us)];
+                    usings.Add(key, list);
+                    continue;
+                }
+
+                list.Add(new Ns(key, us));
             }
 
             foreach (var rootMember in root.Members)
@@ -344,39 +371,47 @@ partial class Program
         }
 
         // sort out global vs non global ns...
-        foreach (var us in usings.ToArray())
+        var array = usings.ToArray();
+        foreach (var kv in array)
         {
-            if (!us.StartsWith("global "))
+            if (!kv.Key.StartsWith("global "))
             {
-                var ns = us.Split(["using "], StringSplitOptions.None)[1];
+                var ns = kv.Key.Split(["using "], StringSplitOptions.None)[1];
                 if (excludedNamespaces.Contains(ns, StringComparer.OrdinalIgnoreCase))
                 {
-                    usings.Remove(us);
+                    usings.Remove(kv.Key);
                     continue;
                 }
 
                 var globalUsing = "global using global::" + ns;
-                if (usings.Contains(globalUsing))
+                if (usings.ContainsKey(globalUsing))
                 {
-                    usings.Remove(us);
+                    usings.Remove(kv.Key);
                 }
             }
             else
             {
-                var ns = us.Split(["using "], StringSplitOptions.None)[1].Replace("global::", string.Empty).Replace(";", string.Empty);
+                var ns = kv.Key.Split(["using "], StringSplitOptions.None)[1].Replace("global::", string.Empty).Replace(";", string.Empty);
                 Console.WriteLine("GLU: " + ns);
                 if (excludedNamespaces.Contains(ns, StringComparer.OrdinalIgnoreCase))
                 {
                     var globalUsing = "global using global::" + ns;
-                    usings.Remove(us);
+                    usings.Remove(kv.Key);
                     usings.Remove(globalUsing);
                     continue;
                 }
             }
         }
 
-        var uss = usings.ToList();
-        uss.Sort();
+        var uss = new List<KeyValuePair<string, List<Ns>>>();
+        foreach (var kv in usings)
+        {
+            if (publicTypes.Where(t => t.Key.StartsWith(kv.Key)).Any())
+            {
+                kv.Value.ForEach(v => v.HasPublicTypes = true);
+            }
+            uss.Add(kv);
+        }
 
         // bit of a hack... seems to work for me so far :-)
         using var writer = new StreamWriter(outputFilePath, false, encoding);
@@ -410,10 +445,10 @@ partial class Program
             writer.WriteLine("*/");
         }
 
-        foreach (var us in uss)
+        foreach (var us in uss.OrderBy(u => u.Key))
         {
-            Console.WriteLine("Using: " + us);
-            writer.WriteLine(NormalizeLineEndings(us));
+            Console.WriteLine("Using: " + us.Key);
+            writer.WriteLine(NormalizeLineEndings(us.Key));
         }
 
         writer.WriteLine();
